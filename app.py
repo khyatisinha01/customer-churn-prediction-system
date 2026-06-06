@@ -1,34 +1,47 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI
+from pydantic import BaseModel
 import pickle
 import numpy as np
 
-app = FastAPI()
-
-print("APP LOADED")
+app = FastAPI(
+    title="Customer Churn Prediction API",
+    description="Predicts customer churn using a trained Logistic Regression model.",
+    version="1.0.0"
+)
 
 # Load model
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
 
-# Home route
+
+class ChurnInput(BaseModel):
+    features: list[float]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "features": [0, 12, 1, 0, 1, 0, 1, 0, 29.85, 29.85,
+                              1, 0, 0, 1, 0, 1, 0, 0, 1, 0,
+                              1, 0, 0, 1, 0, 0, 1, 0, 0, 1]
+            }
+        }
+
+
 @app.get("/")
 def home():
-    return {"message": "API is running"}
+    return {"message": "Churn Prediction API is running", "docs": "/docs"}
 
-# Prediction route
+
 @app.post("/predict")
-def predict(data: str = Form(...)):
+def predict(input: ChurnInput):
     try:
-        # Convert input string → list of numbers
-        data = [float(i.strip()) for i in data.split(",")]
-
-        # Reshape for model
-        data = np.array(data).reshape(1, -1)
-
-        # Predict
+        data = np.array(input.features).reshape(1, -1)
         prediction = model.predict(data)
-
-        return {"prediction": int(prediction[0])}
-
+        probability = model.predict_proba(data)[0][1]
+        return {
+            "prediction": int(prediction[0]),
+            "label": "Churn" if prediction[0] == 1 else "No Churn",
+            "churn_probability": round(float(probability), 4)
+        }
     except Exception as e:
         return {"error": str(e)}
